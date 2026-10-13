@@ -1,0 +1,12 @@
+dataset_raw/
+*.7z
+dataset/*.npy
+!dataset/classes.json
+teoria/
+docs/
+__pycache__/
+*.pyc
+.git
+.gitignore
+venv/
+

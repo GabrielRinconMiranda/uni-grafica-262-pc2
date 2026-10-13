@@ -1,0 +1,20 @@
+# Entornos virtuales y dependencias
+venv/
+env/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Datos crudos y comprimidos pesados
+dataset_raw/
+*.7z
+dataset/*.npy
+!dataset/classes.json
+
+# Archivos de depuracion y logs
+*.log
+.DS_Store
+.vscode/
+.idea/
+

@@ -1,0 +1,68 @@
+{
+  "classes": [
+    {
+      "id": 0,
+      "key": "notes",
+      "name": "Figura: negra",
+      "symbol": "𝅘𝅥",
+      "category": "Figuras rítmicas",
+      "description": "Símbolo musical con cabeza rellena y plica vertical."
+    },
+    {
+      "id": 1,
+      "key": "notesopen",
+      "name": "Figura: blanca",
+      "symbol": "𝅗𝅥",
+      "category": "Figuras rítmicas",
+      "description": "Símbolo musical con cabeza ovalada hueca y plica vertical."
+    },
+    {
+      "id": 2,
+      "key": "sharps",
+      "name": "Armadura: sostenido",
+      "symbol": "♯",
+      "category": "Alteraciones y armaduras",
+      "description": "Signo que eleva la entonación medio tono."
+    },
+    {
+      "id": 3,
+      "key": "flat",
+      "name": "Armadura: bemol",
+      "symbol": "♭",
+      "category": "Alteraciones y armaduras",
+      "description": "Signo que reduce la entonación medio tono."
+    },
+    {
+      "id": 4,
+      "key": "naturals",
+      "name": "Armadura: becuadro",
+      "symbol": "♮",
+      "category": "Alteraciones y armaduras",
+      "description": "Signo que cancela alteraciones previas."
+    },
+    {
+      "id": 5,
+      "key": "beams",
+      "name": "Compuesto: barra de unión",
+      "symbol": "♫",
+      "category": "Símbolos compuestos",
+      "description": "Trazo que une dos o más plicas de figuras."
+    },
+    {
+      "id": 6,
+      "key": "rests2",
+      "name": "Silencio: silencio de negra",
+      "symbol": "𝄽",
+      "category": "Silencios",
+      "description": "Pausa con duración equivalente a una negra."
+    },
+    {
+      "id": 7,
+      "key": "trebleclef",
+      "name": "Clave: clave de sol",
+      "symbol": "   𝄞",
+      "category": "Claves musicales",
+      "description": "Signo que sitúa la referencia en la segunda línea."
+    }
+  ]
+}

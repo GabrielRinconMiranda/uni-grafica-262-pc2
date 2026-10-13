@@ -1,0 +1,160 @@
+{
+  "top1_accuracy": 98.91,
+  "top2_accuracy": 99.69,
+  "metricas_por_clase": [
+    {
+      "id": 0,
+      "name": "Figura: negra",
+      "precision": 99.37,
+      "recall": 99.37,
+      "f1": 99.37,
+      "muestras": 158
+    },
+    {
+      "id": 1,
+      "name": "Figura: blanca",
+      "precision": 98.64,
+      "recall": 99.32,
+      "f1": 98.98,
+      "muestras": 146
+    },
+    {
+      "id": 2,
+      "name": "Armadura: sostenido",
+      "precision": 98.35,
+      "recall": 98.9,
+      "f1": 98.62,
+      "muestras": 181
+    },
+    {
+      "id": 3,
+      "name": "Armadura: bemol",
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "muestras": 163
+    },
+    {
+      "id": 4,
+      "name": "Armadura: becuadro",
+      "precision": 98.82,
+      "recall": 100.0,
+      "f1": 99.41,
+      "muestras": 168
+    },
+    {
+      "id": 5,
+      "name": "Compuesto: barra de uni\u00f3n",
+      "precision": 100.0,
+      "recall": 95.35,
+      "f1": 97.62,
+      "muestras": 172
+    },
+    {
+      "id": 6,
+      "name": "Silencio: silencio de negra",
+      "precision": 96.55,
+      "recall": 100.0,
+      "f1": 98.25,
+      "muestras": 140
+    },
+    {
+      "id": 7,
+      "name": "Clave: clave de sol",
+      "precision": 99.34,
+      "recall": 98.68,
+      "f1": 99.01,
+      "muestras": 152
+    }
+  ],
+  "confianza_aciertos": 98.15,
+  "confianza_errores": 69.9,
+  "margen_certidumbre": 28.26,
+  "matriz_confusion": [
+    [
+      157,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      145,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      179,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      163,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      168,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      1,
+      0,
+      0,
+      164,
+      5,
+      1
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      140,
+      0
+    ],
+    [
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      150
+    ]
+  ],
+  "test_loss": 0.0561,
+  "latencia_media_ms": 14.57,
+  "latencia_p95_ms": 16.01,
+  "throughput_fps": 68.6,
+  "total_parametros": 80520
+}

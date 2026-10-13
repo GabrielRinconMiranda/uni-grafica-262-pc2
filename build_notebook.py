@@ -1,0 +1,457 @@
+import json
+import os
+
+def create_notebook():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    cells = []
+
+    # Celda 1: Markdown - Introduccion y fundamentacion teorica
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "# Reconocimiento de figuras musicales con red convolucional densa\n",
+            "\n",
+            "Este proyecto implementa el entrenamiento, evaluación métrica e inferencia de un modelo convolucional denso para la clasificación de símbolos musicales (figuras rítmicas, armaduras de tonalidad, barras de unión compuestas, silencios y claves) a partir de imágenes monocromáticas de trazo.\n",
+            "\n",
+            "### Fundamentación teórica de la arquitectura DenseNet\n",
+            "\n",
+            "A diferencia de las redes convolucionales tradicionales donde la capa $l$ recibe únicamente la salida de la capa previa $x_{l-1}$, una red densa (*Densely Connected Convolutional Network*) conecta directamente cada capa con todas las subsiguientes mediante concatenación de características:\n",
+            "\n",
+            "$$x_l = H_l([x_0, x_1, \\dots, x_{l-1}])$$\n",
+            "\n",
+            "donde:\n",
+            "- $[x_0, x_1, \\dots, x_{l-1}]$ denota la concatenación de los mapas de características generados en todas las capas anteriores a lo largo de la dimensión de canales.\n",
+            "- $H_l(\\cdot)$ es una transformación no lineal compuesta definida por la secuencia: **Normalización por lotes (BatchNorm) $\\to$ Activación no lineal (ReLU) $\\to$ Convolución bidimensional ($3 \\times 3$)**.\n",
+            "- Tasa de crecimiento ($k=16$): cada función $H_l$ produce $k$ nuevos mapas de canales. Si el volumen inicial posee $k_0$ canales, la capa $l$ recibe un tensor con $k_0 + l \\cdot k$ canales.\n",
+            "\n",
+            "### Capas de transición y compresión\n",
+            "\n",
+            "Para controlar el crecimiento de la dimensionalidad entre bloques densos consecutivos, se intercala una capa de transición compuesta por:\n",
+            "1. Convolución $1 \\times 1$ de compresión con factor $\\theta = 0.5$, reduciendo a la mitad la cantidad de canales acumulados: $m = \\lfloor \\theta \\cdot m_{\\text{in}} \\rfloor$.\n",
+            "2. Reducción espacial mediante submuestreo de promedio (*Average Pooling*) $2 \\times 2$ con paso (*stride*) de 2.\n",
+            "\n",
+            "### Agrupamiento global y función de costo\n",
+            "\n",
+            "Al finalizar las etapas convolucionales, se aplica un agrupamiento promedio global (*Global Average Pooling*, GAP) que promedia cada mapa de características en una sola magnitud escalar ($C \\times H \\times W \\to C \\times 1 \\times 1$). Esto desacopla el clasificador lineal de la resolución espacial, previene el sobreajuste y minimiza el número de parámetros libres.\n",
+            "\n",
+            "La optimización se realiza mediante la función de pérdida de entropía cruzada multiclase:\n",
+            "\n",
+            "$$\\mathcal{L}_{\\text{CE}} = - \\sum_{c=1}^C y_c \\log \\left( \\frac{\\exp(z_c)}{\\sum_{j=1}^C \\exp(z_j)} \\right)$$\n",
+            "\n",
+            "donde $y_c \\in \\{0, 1\\}$ es el vector unitario que codifica la clase real y $z_c$ representa el logit generado por la capa lineal final para la clase $c$."
+        ]
+    })
+
+    # Celda 2: Codigo - Importaciones del entorno
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "import os\n",
+            "import sys\n",
+            "import json\n",
+            "import numpy as np\n",
+            "import matplotlib.pyplot as plt\n",
+            "import torch\n",
+            "\n",
+            "base_dir = os.path.abspath('.')\n",
+            "if base_dir not in sys.path:\n",
+            "    sys.path.insert(0, base_dir)\n",
+            "\n",
+            "from src.model import DenseNetMusical\n",
+            "from src.dataset import create_dataloaders, load_classes_metadata\n",
+            "from src.predict import MusicalSymbolPredictor\n",
+            "\n",
+            "device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')\n",
+            "print('Dispositivo de cómputo en uso:', device)"
+        ]
+    })
+
+    # Celda 3: Markdown - Metodologia de recoleccion y curacion de datos
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Metodología de recolección y curación de datos\n",
+            "\n",
+            "Para lograr robustez ante trazos interactivos en pantalla, el conjunto de entrenamiento integra una base de datos híbrida:\n",
+            "\n",
+            "1. **Recolección de dibujos propios en lienzo interactivo:** A través del módulo `recolector.py`, el equipo capturó **1,200 dibujos manuales** (150 por categoría) trazados con mouse en un lienzo de 220×220 px y grosor de 12 px (idéntico al entorno de despliegue). El recolector balancea automáticamente las clases solicitando siempre el símbolo con menor conteo.\n",
+            "2. **Base de referencia pública:** Se seleccionaron muestras complementarias del repositorio Rebelo (`db1` y `db2`) para completar 650 instancias por clase.\n",
+            "3. **Fusión y balanceo estricto:** 150 dibujos propios + 650 públicos = **800 muestras por categoría (6,400 en total)**, eliminando cualquier sesgo hacia clases mayoritarias.\n",
+            "4. **Preprocesamiento morfológico:** Binarización invertida (fondo negro, trazo blanco), centrado de masa con margen perimetral del 15% e interpolación bilineal a resolución de $64 \\times 64$ píxeles.\n",
+            "5. **Partición estratificada desacoplada:**\n",
+            "   - 70% entrenamiento (4,480 muestras).\n",
+            "   - 10% validación (640 muestras).\n",
+            "   - 20% prueba independiente (1,280 muestras)."
+        ]
+    })
+
+    # Celda 4: Codigo - Carga y conteo de datos curados
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "classes = load_classes_metadata()\n",
+            "data_path = os.path.join(base_dir, 'dataset', 'data_musical.npz')\n",
+            "data = np.load(data_path)\n",
+            "X, y = data['X'], data['y']\n",
+            "\n",
+            "print(f'Total de muestras procesadas: {len(X)}')\n",
+            "print(f'Dimensiones del tensor: {X.shape[1:]} (resolución 64x64, 1 canal)')\n",
+            "print('\\nDistribución balanceada por categoría:')\n",
+            "for c in classes:\n",
+            "    count = int(np.sum(y == c['id']))\n",
+            "    print(f\"  [{c['id']}] {c['symbol']} {c['name']:28s} | Muestras: {count} ({c['category']})\")"
+        ]
+    })
+
+    # Celda 5: Codigo - Muestras visuales de las categorias
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "fig, axes = plt.subplots(2, 4, figsize=(10, 5))\n",
+            "axes = axes.flatten()\n",
+            "for i, c in enumerate(classes):\n",
+            "    idx = np.where(y == c['id'])[0][10]\n",
+            "    axes[i].imshow(X[idx], cmap='gray')\n",
+            "    axes[i].set_title(c['name'], fontsize=9)\n",
+            "    axes[i].axis('off')\n",
+            "plt.tight_layout()\n",
+            "plt.show()"
+        ]
+    })
+
+    # Celda 6: Markdown - Arquitectura de la red
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Arquitectura del modelo `DenseNetMusical`\n",
+            "\n",
+            "La red consta de:\n",
+            "- Convolución inicial: $3 \\times 3$, 32 filtros, padding=1 (mantiene resolución $64 \\times 64$).\n",
+            "- Bloque denso 1: 3 capas densas, $k=16$ (crece de 32 a 80 canales).\n",
+            "- Transición 1: convolución $1 \\times 1$ (comprime a 40 canales) + Average Pooling $2 \\times 2$ (resolución a $32 \\times 32$).\n",
+            "- Bloque denso 2: 3 capas densas, $k=16$ (crece de 40 a 88 canales).\n",
+            "- Transición 2: convolución $1 \\times 1$ (comprime a 44 canales) + Average Pooling $2 \\times 2$ (resolución a $16 \\times 16$).\n",
+            "- Bloque denso 3: 3 capas densas, $k=16$ (crece de 44 a 92 canales).\n",
+            "- Normalización final y Global Average Pooling (tensor colapsa a $92 \\times 1 \\times 1$).\n",
+            "- Clasificador lineal: proyección de 92 canales a 8 clases (80,520 parámetros en total)."
+        ]
+    })
+
+    # Celda 7: Codigo - Instanciacion y conteo de parametros
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "model = DenseNetMusical(in_channels=1, num_classes=len(classes), growth_rate=16).to(device)\n",
+            "total_params = sum(p.numel() for p in model.parameters())\n",
+            "trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)\n",
+            "print(f'Parámetros totales: {total_params:,}')\n",
+            "print(f'Parámetros entrenables: {trainable_params:,}')"
+        ]
+    })
+
+    # Celda 8: Markdown - Curvas de entrenamiento
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Curvas de convergencia y optimización\n",
+            "\n",
+            "El modelo se entrenó durante 15 épocas mediante el algoritmo Adam ($\\eta_0 = 0.001$), incorporando el programador adaptativo `ReduceLROnPlateau` que reduce la tasa de aprendizaje a la mitad ante estancamientos en la pérdida de validación."
+        ]
+    })
+
+    # Celda 9: Codigo - Graficacion de perdida y exactitud
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "train_loader, val_loader, test_loader, _ = create_dataloaders(data_file_path=data_path, batch_size=32)\n",
+            "\n",
+            "hist_path = os.path.join(base_dir, 'models', 'training_history.json')\n",
+            "with open(hist_path, 'r', encoding='utf-8') as f:\n",
+            "    hist = json.load(f)\n",
+            "\n",
+            "epochs = range(1, len(hist['train_loss']) + 1)\n",
+            "fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))\n",
+            "\n",
+            "ax1.plot(epochs, hist['train_loss'], label='Entrenamiento', color='#2563eb', linewidth=1.8)\n",
+            "ax1.plot(epochs, hist['val_loss'], label='Validación', color='#dc2626', linewidth=1.8)\n",
+            "ax1.set_title('Pérdida (Entropía cruzada)', fontsize=10)\n",
+            "ax1.set_xlabel('Época')\n",
+            "ax1.legend()\n",
+            "ax1.grid(True, linestyle='--', alpha=0.5)\n",
+            "\n",
+            "ax2.plot(epochs, [a * 100 for a in hist['train_acc']], label='Entrenamiento', color='#2563eb', linewidth=1.8)\n",
+            "ax2.plot(epochs, [a * 100 for a in hist['val_acc']], label='Validación', color='#dc2626', linewidth=1.8)\n",
+            "ax2.set_title('Exactitud (%)', fontsize=10)\n",
+            "ax2.set_xlabel('Época')\n",
+            "ax2.legend()\n",
+            "ax2.grid(True, linestyle='--', alpha=0.5)\n",
+            "\n",
+            "plt.tight_layout()\n",
+            "plt.show()"
+        ]
+    })
+
+    # Celda 10: Markdown - Evaluacion cuantitativa y dominio de metricas
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Evaluación cuantitativa y dominio de las métricas\n",
+            "\n",
+            "A continuación se describe el dominio, definición matemática e interpretación técnica de cada dimensión evaluada:\n",
+            "\n",
+            "1. **Exactitud Top-1 ($[0, 100]\\%$):**\n",
+            "   $$\\text{Top-1} = \\frac{1}{N} \\sum_{i=1}^N \\mathbb{I}(\\hat{y}_{i, 1} = y_i)$$\n",
+            "   Representa el porcentaje de muestras donde la categoría de mayor probabilidad coincide exactamente con la etiqueta real.\n",
+            "\n",
+            "2. **Exactitud Top-2 ($[0, 100]\\%$):**\n",
+            "   $$\\text{Top-2} = \\frac{1}{N} \\sum_{i=1}^N \\mathbb{I}(y_i \\in \\{\\hat{y}_{i, 1}, \\hat{y}_{i, 2}\\})$$\n",
+            "   Cuantifica si la etiqueta verdadera se encuentra entre las 2 primeras opciones más verosímiles del modelo.\n",
+            "\n",
+            "3. **Precisión ($[0, 100]\\%$):**\n",
+            "   $$\\text{Precisión} = \\frac{TP}{TP + FP}$$\n",
+            "   Mide la fracción de predicciones de una clase que resultaron verdaderas.\n",
+            "\n",
+            "4. **Exhaustividad / Recall ($[0, 100]\\%$):**\n",
+            "   $$\\text{Recall} = \\frac{TP}{TP + FN}$$\n",
+            "   Mide la proporción de muestras reales de una categoría identificadas con éxito por el modelo.\n",
+            "\n",
+            "5. **F1-Score ($[0, 100]\\%$):**\n",
+            "   $$\\text{F1} = 2 \\cdot \\frac{\\text{Precisión} \\cdot \\text{Recall}}{\\text{Precisión} + \\text{Recall}}$$\n",
+            "   Media armónica entre precisión y exhaustividad.\n",
+            "\n",
+            "6. **Latencia de inferencia y rendimiento ($[0, \\infty)$ ms, fps):**\n",
+            "   Tiempo promedio de procesamiento hacia adelante por muestra en procesador CPU.\n",
+            "\n",
+            "7. **Margen de certidumbre ($\\Delta P \\in [0, 100]\\%$):**\n",
+            "   $$\\Delta P = \\bar{P}_{\\text{aciertos}} - \\bar{P}_{\\text{errores}}$$\n",
+            "   Diferencia promedio entre la confianza softmax en predicciones correctas frente a incorrectas."
+        ]
+    })
+
+    # Celda 11: Codigo - Matriz de confusion y reporte detallado
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "metrics_path = os.path.join(base_dir, 'models', 'test_metrics.json')\n",
+            "with open(metrics_path, 'r', encoding='utf-8') as f:\n",
+            "    metrics = json.load(f)\n",
+            "\n",
+            "print(f\"Exactitud Top-1 en conjunto de prueba: {metrics['top1_accuracy']}%\")\n",
+            "print(f\"Exactitud Top-2 en conjunto de prueba: {metrics['top2_accuracy']}%\")\n",
+            "print(f\"Latencia media en CPU: {metrics['latencia_media_ms']} ms (P95: {metrics['latencia_p95_ms']} ms)\")\n",
+            "print(f\"Rendimiento de procesamiento: {metrics['throughput_fps']} cuadros/segundo\")\n",
+            "print(f\"Confianza en aciertos: {metrics['confianza_aciertos']}% | En errores: {metrics['confianza_errores']}%\")\n",
+            "print(f\"Margen de certidumbre (Delta P): {metrics['margen_certidumbre']}%\")\n",
+            "print('\\nMétricas discriminadas por clase:')\n",
+            "print(f\"{'Clase':30s} | {'Precisión':9s} | {'Recall':8s} | {'F1-Score':8s} | {'Muestras':8s}\")\n",
+            "print('-' * 74)\n",
+            "for m in metrics['metricas_por_clase']:\n",
+            "    print(f\"{m['name']:30s} | {m['precision']:8.2f}% | {m['recall']:7.2f}% | {m['f1']:7.2f}% | {m['muestras']:8d}\")\n",
+            "\n",
+            "cm = np.array(metrics['matriz_confusion'])\n",
+            "n_cls = len(classes)\n",
+            "names = [c['name'] for c in classes]\n",
+            "\n",
+            "fig, ax = plt.subplots(figsize=(7, 6))\n",
+            "im = ax.imshow(cm, cmap='Blues')\n",
+            "ax.set_xticks(range(n_cls))\n",
+            "ax.set_yticks(range(n_cls))\n",
+            "ax.set_xticklabels(names, rotation=45, ha='right', fontsize=8)\n",
+            "ax.set_yticklabels(names, fontsize=8)\n",
+            "for i in range(n_cls):\n",
+            "    for j in range(n_cls):\n",
+            "        ax.text(j, i, str(cm[i, j]), ha='center', va='center', fontsize=8,\n",
+            "                color='white' if cm[i, j] > cm.max() / 2 else 'black')\n",
+            "ax.set_xlabel('Clase predicha')\n",
+            "ax.set_ylabel('Clase real')\n",
+            "ax.set_title('Matriz de confusión en prueba (1,280 muestras)')\n",
+            "plt.tight_layout()\n",
+            "plt.show()"
+        ]
+    })
+
+    # Celda 12: Markdown - Inspeccion visual de activaciones intermedias
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Inspección visual de representaciones intermedias\n",
+            "\n",
+            "Para analizar cómo la red transforma la información de entrada a lo largo de las capas, se extrae el promedio de activación de canales en tres etapas clave:\n",
+            "1. **Convolución inicial ($64 \\times 64$):** Detección de trazos elementales, bordes y orientación.\n",
+            "2. **Transición 1 ($32 \\times 32$):** Consolidación de uniones, bucles y grosor tras el primer bloque denso.\n",
+            "3. **Mapas profundos finales ($16 \\times 16$):** Activaciones de alta abstracción morfológica previas al agrupamiento global."
+        ]
+    })
+
+    # Celda 13: Codigo - Visualizacion de capas
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "weights_path = os.path.join(base_dir, 'models', 'densenet_musical.pth')\n",
+            "checkpoint = torch.load(weights_path, map_location=device)\n",
+            "model.load_state_dict(checkpoint['model_state_dict'])\n",
+            "model.eval()\n",
+            "\n",
+            "sample_tensor, sample_label = test_loader.dataset[0]\n",
+            "acts = model.get_intermediate_activations(sample_tensor.unsqueeze(0).to(device))\n",
+            "\n",
+            "img_in = sample_tensor.squeeze().numpy()\n",
+            "act_conv = acts['capa_inicial'][0].mean(dim=0).cpu().numpy()\n",
+            "act_trans = acts['transicion_1'][0].mean(dim=0).cpu().numpy()\n",
+            "act_deep = acts['mapas_profundos'][0].mean(dim=0).cpu().numpy()\n",
+            "\n",
+            "fig, axes = plt.subplots(1, 4, figsize=(12, 3))\n",
+            "axes[0].imshow(img_in, cmap='gray')\n",
+            "axes[0].set_title(f\"Entrada ({classes[sample_label]['name']})\", fontsize=8)\n",
+            "axes[0].axis('off')\n",
+            "\n",
+            "axes[1].imshow(act_conv, cmap='inferno')\n",
+            "axes[1].set_title(f\"Convolución inicial\\n({acts['capa_inicial'].shape[1]} can, 64x64)\", fontsize=8)\n",
+            "axes[1].axis('off')\n",
+            "\n",
+            "axes[2].imshow(act_trans, cmap='inferno')\n",
+            "axes[2].set_title(f\"Transición 1\\n({acts['transicion_1'].shape[1]} can, 32x32)\", fontsize=8)\n",
+            "axes[2].axis('off')\n",
+            "\n",
+            "axes[3].imshow(act_deep, cmap='inferno')\n",
+            "axes[3].set_title(f\"Mapas profundos\\n({acts['mapas_profundos'].shape[1]} can, 16x16)\", fontsize=8)\n",
+            "axes[3].axis('off')\n",
+            "\n",
+            "plt.tight_layout()\n",
+            "plt.show()"
+        ]
+    })
+
+    # Celda 14: Markdown - Inferencia individual
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Inferencia de prueba sobre muestras individuales\n",
+            "\n",
+            "Evaluación de predicción individual con el módulo desacoplado `MusicalSymbolPredictor`."
+        ]
+    })
+
+    # Celda 15: Codigo - Inferencia individual
+    cells.append({
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [
+            "predictor = MusicalSymbolPredictor(model_path=weights_path, device=device)\n",
+            "\n",
+            "for i in [10, 60, 110, 160]:\n",
+            "    sample_img, label = test_loader.dataset[i]\n",
+            "    img_np = (sample_img.squeeze().numpy() * 255).astype(np.uint8)\n",
+            "    res = predictor.predict(img_np, top_k=2, generate_cam=False)\n",
+            "    real_name = classes[label]['name']\n",
+            "    pred_name = res['prediction']['name']\n",
+            "    pct = res['prediction']['percentage']\n",
+            "    print(f'Muestra #{i:3d} | Real: {real_name:26s} | Predicción: {pred_name:26s} ({pct:.1f}%)')"
+        ]
+    })
+
+    # Celda 16: Markdown - Observaciones tecnicas sobre casos particulares
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Observaciones técnicas sobre casos particulares\n",
+            "\n",
+            "1. **Comportamiento en la clase de figuras compuestas (`Compuesto: barra de unión`):**\n",
+            "   - En el conjunto de datos de entrenamiento (Rebelo), la categoría correspondiente a vigas o barras de unión (`beams`) fue aislada tras la eliminación automática de los pentagramas, conteniendo barras horizontales o inclinadas segmentadas.\n",
+            "   - Al trazar únicamente líneas paralelas continuas, el clasificador predice con certeza superior al 95%. Si se incorporan plicas verticales, el peso geométrico de estos trazos puede orientar la predicción hacia la figura negra. Es la clase con menor exhaustividad (95.35%) debido a similitud geométrica con trazos inclinados del silencio de negra.\n",
+            "\n",
+            "2. **Estabilidad alcanzada en el silencio de negra (`Silencio: silencio de negra`):**\n",
+            "   - En la iteración inicial con datos públicos exclusivamente, el silencio de negra exhibía dispersión morfológica e inconsistencia ante trazos libres.\n",
+            "   - La incorporación de los 150 dibujos capturados en el lienzo interactivo resolvió esta limitación, alcanzando una exhaustividad del **100.0% (140/140 aciertos en prueba)** y una precisión del 96.55%."
+        ]
+    })
+
+    # Celda 17: Markdown - Conclusiones del proyecto
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Conclusiones\n",
+            "\n",
+            "1. **Impacto de la recolección de datos propios en el dominio de inferencia:** La inclusión de 1,200 trazos interactivos capturados en el mismo lienzo de prueba elevó la exactitud Top-1 del 96.17% al **98.91%** y la Top-2 al **99.69%**, reduciendo los errores en prueba de 49 a tan solo 14 muestras.\n",
+            "2. **Eficiencia arquitectónica de DenseNet:** La concatenación directa de mapas permite alcanzar un desempeño superior al 98.9% con únicamente 80,520 parámetros entrenables, superando a arquitecturas convolucionales estándar de mayor complejidad.\n",
+            "3. **Factibilidad para inferencia en tiempo real:** Una latencia media de 14.57 ms (68.6 cuadros por segundo) en CPU ordinaria garantiza una respuesta interactiva imperceptible para el usuario.\n",
+            "4. **Calibración y confianza probabilística:** El margen de certidumbre de 28.26% entre aciertos (98.15%) y equivocaciones (69.90%) constata que el clasificador no produce sobreconfianza espuria ante trazos ambiguos."
+        ]
+    })
+
+    # Celda 18: Markdown - Despliegue de la aplicacion web y gestion de hilos por usuario
+    cells.append({
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [
+            "## Despliegue de la aplicación web y gestión de sesiones por usuario\n",
+            "\n",
+            "La aplicación web (`run_web.py`) implementa una arquitectura desacoplada en Flask:\n",
+            "- **Gestión de hilos y sesiones por cliente:** Cada usuario que accede a la aplicación recibe una sesión independiente (`X-Session-ID` / cookie), de modo que su contador de evaluaciones y su barra de aciertos inician estrictamente desde cero (0.0%).\n",
+            "- **Aislamiento concurrente:** Las evaluaciones de un usuario no interfieren con las métricas de otros evaluadores concurrentes mediante control de concurrencia con cerrojos de hilo (`threading.Lock()`).\n",
+            "- **Inferencia thread-safe:** La evaluación en PyTorch se encuentra protegida ante colisiones de memoria en CPU.\n",
+            "\n",
+            "Para iniciar el servidor localmente:\n",
+            "```bash\n",
+            "python run_web.py\n",
+            "```\n",
+            "Acceder en el navegador a: `http://localhost:5000`"
+        ]
+    })
+
+    notebook = {
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+            },
+            "language_info": {
+                "name": "python",
+                "version": "3.11"
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5
+    }
+
+    out_file = os.path.join(base_dir, "clasificador_simbolos_musicales.ipynb")
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(notebook, f, indent=2, ensure_ascii=False)
+    print(f"Jupyter Notebook generado exitosamente en: {out_file}")
+
+if __name__ == "__main__":
+    create_notebook()

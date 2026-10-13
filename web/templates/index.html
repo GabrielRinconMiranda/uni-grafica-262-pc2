@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconocimiento de figuras musicales</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ cache_id }}">
+</head>
+<body>
+  <div id="appConfig" data-session-id="{{ session_id }}" data-cache-id="{{ cache_id }}" style="display:none;"></div>
+
+  <div class="contenedor">
+    <header class="encabezado-app">
+      <h1>Reconocimiento de figuras musicales</h1>
+    </header>
+
+    <main class="area-interactiva">
+      <div class="panel-dibujo">
+        <canvas id="lienzo" width="220" height="220"></canvas>
+        <div class="controles">
+          <label for="grosor">Grosor:</label>
+          <input type="range" id="grosor" min="4" max="24" value="12">
+          <button id="btnBorrar" type="button">Borrar</button>
+          <button id="btnClasificar" class="btn-principal" type="button">Clasificar</button>
+        </div>
+        <div class="subir-archivo">
+          <label for="inputArchivo">O subir imagen:</label>
+          <input type="file" id="inputArchivo" accept="image/*">
+        </div>
+      </div>
+
+      <div class="panel-resultado">
+        <h2>Resultado de la clasificación</h2>
+        <div id="resultadoTexto" class="resultado-vacio">Dibuja un símbolo musical en el lienzo y pulsa clasificar.</div>
+        <div id="listaProbabilidades" class="probabilidades"></div>
+
+        <div id="seccionFeedback" class="seccion-feedback oculta">
+          <p class="etiqueta-feedback">Evaluar predicción:</p>
+          <div class="botones-feedback">
+            <button type="button" class="btn-fb btn-correcto" data-tipo="correcta">Correcta</button>
+            <button type="button" class="btn-fb btn-incorrecto" data-tipo="incorrecta">Incorrecta</button>
+            <button type="button" class="btn-fb btn-invalido" data-tipo="invalida">Inválida</button>
+          </div>
+          <p id="mensajeFeedback" class="mensaje-fb"></p>
+        </div>
+
+        <div class="resumen-evaluacion">
+          <div class="barra-feedback-contenedor">
+            <div id="barraFeedbackProgreso" class="barra-feedback-progreso" style="width: 0%;"></div>
+          </div>
+          <div class="texto-evaluacion">
+            <span class="chip-sesion">Sesión: <code id="etiquetaSesion">{{ session_id }}</code></span>
+            <span>Aciertos: <strong id="contadorCorrectas">0</strong></span>
+            <span>Errores: <strong id="contadorIncorrectas">0</strong></span>
+            <span>Inválidas: <strong id="contadorInvalidas">0</strong></span>
+            <span>Tasa de acierto: <strong id="tasaAcierto">0.0%</strong></span>
+            <div class="acciones-evaluacion">
+              <button id="btnReiniciarStats" type="button" class="btn-reiniciar" title="Reiniciar contador de esta sesión">Reiniciar</button>
+              <button id="btnNuevaSesion" type="button" class="btn-reiniciar" title="Iniciar un nuevo espacio de sesión aislado">Nueva sesión</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <section class="paneles-informacion">
+      <details class="panel-desplegable" id="panelCapas">
+        <summary>Capas intermedias de la red</summary>
+        <div class="contenido-desplegable">
+          <p class="descripcion-seccion">Mapas de activación promedio por canal extraídos durante la propagación hacia adelante:</p>
+          <div id="gridCapas" class="grid-capas">
+            <div class="capa-vacia">Realiza una clasificación para inspeccionar las representaciones internas de la red.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel-desplegable">
+        <summary>Métricas cuantitativas del modelo</summary>
+        <div class="contenido-desplegable">
+          {% if metrics %}
+          <div class="tarjetas-metricas">
+            <div class="tarjeta-metrica">
+              <span class="valor-metrica">{{ metrics.top1_accuracy }}%</span>
+              <span class="etiqueta-metrica">Exactitud Top-1</span>
+            </div>
+            <div class="tarjeta-metrica">
+              <span class="valor-metrica">{{ metrics.top2_accuracy }}%</span>
+              <span class="etiqueta-metrica">Exactitud Top-2</span>
+            </div>
+            <div class="tarjeta-metrica">
+              <span class="valor-metrica">{{ metrics.latencia_media_ms }} ms</span>
+              <span class="etiqueta-metrica">Latencia CPU</span>
+            </div>
+            <div class="tarjeta-metrica">
+              <span class="valor-metrica">{{ metrics.margen_certidumbre }}%</span>
+              <span class="etiqueta-metrica">Margen de certidumbre</span>
+            </div>
+          </div>
+
+          <table class="tabla-metricas">
+            <thead>
+              <tr>
+                <th>Clase</th>
+                <th>Precisión</th>
+                <th>Recall</th>
+                <th>F1-Score</th>
+                <th>Muestras</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in metrics.metricas_por_clase %}
+              <tr>
+                <td>{{ m.name }}</td>
+                <td>{{ m.precision }}%</td>
+                <td>{{ m.recall }}%</td>
+                <td>{{ m.f1 }}%</td>
+                <td>{{ m.muestras }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="nota-discreta">No se encontraron métricas calculadas.</p>
+          {% endif %}
+        </div>
+      </details>
+
+      <details class="panel-desplegable">
+        <summary>Leyenda de símbolos reconocidos</summary>
+        <div class="contenido-desplegable">
+          <table class="tabla-leyenda">
+            <thead>
+              <tr>
+                <th>Símbolo</th>
+                <th>Nombre</th>
+                <th>Categoría</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in classes %}
+              <tr>
+                <td class="col-simbolo">{{ c.symbol }}</td>
+                <td>{{ c.name }}</td>
+                <td class="col-categoria">{{ c.category }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details class="panel-desplegable">
+        <summary>Observaciones sobre casos particulares</summary>
+        <div class="contenido-desplegable">
+          <ul class="lista-observaciones">
+            <li><strong>Compuesto (barra de unión):</strong> El conjunto de entrenamiento incluye barras de unión horizontales o inclinadas segmentadas. Al trazar únicamente líneas paralelas continuas, el modelo clasifica con certeza superior al 95%. Si se incorporan plicas verticales, el peso geométrico de estos trazos puede orientar la predicción hacia la figura negra.</li>
+            <li><strong>Silencio de negra:</strong> La inclusión de 150 dibujos capturados en el lienzo interactivo elevó la exhaustividad de esta categoría al 100% (140/140 aciertos en prueba), estabilizando el reconocimiento frente a variaciones de trazo manual.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/canvas.js') }}?v={{ cache_id }}"></script>
+</body>
+</html>
