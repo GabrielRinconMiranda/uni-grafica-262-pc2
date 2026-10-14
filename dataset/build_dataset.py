@@ -119,6 +119,24 @@ def build_dataset(raw_dirs, classes_config_path, output_dir, samples_per_class=8
     print(f"  Archivo comprimido: {np_path}")
     return X, y
 
+def ensure_raw_datasets(base_dir):
+    """Extrae automaticamente database1.7z y database2.7z en dataset_raw si no existen."""
+    import subprocess
+    raw_dir = os.path.join(base_dir, "dataset_raw")
+    archives = [
+        (os.path.join(base_dir, "database1.7z"), os.path.join(raw_dir, "db1")),
+        (os.path.join(base_dir, "database2.7z"), os.path.join(raw_dir, "db2"))
+    ]
+    for zpath, target in archives:
+        if not os.path.exists(target) and os.path.exists(zpath):
+            print(f"Extrayendo archivo comprimido {os.path.basename(zpath)} en {target}...")
+            os.makedirs(target, exist_ok=True)
+            try:
+                subprocess.run(["7z", "x", zpath, f"-o{target}", "-y"], check=True, stdout=subprocess.DEVNULL)
+                print(f"  Extraccion exitosa de {os.path.basename(zpath)}.")
+            except Exception as e:
+                print(f"  Aviso: No se pudo ejecutar '7z' ({e}). Si es necesario, descomprima manualmente {zpath} en {target}.")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Construccion del dataset musical para entrenamiento")
     parser.add_argument("--samples-per-class", type=int, default=800, help="Numero de muestras por clase (minimo 500)")
@@ -127,6 +145,7 @@ if __name__ == "__main__":
     
     samples = None if args.all else args.samples_per_class
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ensure_raw_datasets(base_dir)
     raw_dirs = [
         os.path.join(base_dir, "dataset_raw", "db1"),
         os.path.join(base_dir, "dataset_raw", "db2"),
@@ -136,4 +155,5 @@ if __name__ == "__main__":
     out_dir = os.path.join(base_dir, "dataset")
     
     build_dataset(raw_dirs, cfg_path, out_dir, samples_per_class=samples)
+
 

@@ -1,20 +1,44 @@
-# Entornos virtuales y dependencias
+# Entornos virtuales y dependencias de Python
 venv/
 env/
 .venv/
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
 
-# Datos crudos y comprimidos pesados
-dataset_raw/
-*.7z
-dataset/*.npy
-!dataset/classes.json
-
-# Archivos de depuracion y logs
+# Fuentes intermedias, generadores y material de referencia no entregables
+build_notebook.py
+presentacion.typ
+referencia presentacion/
+jupyter referencias/
+teoria/
+letras_uni/
+*.tmp
 *.log
+
+# Extracciones intermedias redundantes (las bases de datos se distribuyen en database1.7z y database2.7z)
+dataset_raw/db1/
+dataset_raw/db2/
+
+# Archivos de configuracion de IDE y sistema operativo
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
 
+# Asegurar seguimiento de entregables principales, bases de datos y despliegue
+!presentacion.pdf
+!clasificador_simbolos_musicales.ipynb
+!README.md
+!DESPLIEGUE.md
+!database1.7z
+!database2.7z
+!dataset/data_musical.npz
+!dataset/X.npy
+!dataset/y.npy
+!dataset/classes.json
+!dataset/build_dataset.py
+!dataset_raw/propios/
