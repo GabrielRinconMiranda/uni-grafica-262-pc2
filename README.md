@@ -311,6 +311,6 @@ Evaluación realizada sobre las 1,280 muestras del conjunto de prueba independie
 2. **Arquitectura DenseNet:**
    - Huang, G., Liu, Z., Van Der Maaten, L., & Weinberger, K. Q. (2017). *Densely connected convolutional networks*. CVPR, pp. 4700-4708.
 3. **Material conceptual y de referencia:**
-   - Presentaciones teóricas del curso (`teoria/`): *Principios de Arquitecturas Convolucionales: DenseNets* y *Redes Convolucionales para Clasificación de Imágenes*.
-   - Cuadernos de estudio (`jupyter referencias/`): *Clasificación de Imágenes* y *Notebook Resnets, Global Average Pooling y Class Activation Maps*.
-   - Prototipo base de captura sobre lienzo (`letras_uni/`).
+   - Presentaciones teóricas del curso: *Principios de Arquitecturas Convolucionales: DenseNets* y *Redes Convolucionales para Clasificación de Imágenes*.
+   - Cuadernos de estudio: *Clasificación de Imágenes* y *Notebook Resnets, Global Average Pooling y Class Activation Maps*.
+   - Prototipo base de captura sobre lienzo.
